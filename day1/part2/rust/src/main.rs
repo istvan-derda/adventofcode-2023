@@ -35,7 +35,7 @@ fn main() {
                     _ => panic!(),
                 };
 
-                result = result.replace(word, digit);
+                result = result.replacen(word, digit, 1);
             };
             println!("{}", result);
             result
