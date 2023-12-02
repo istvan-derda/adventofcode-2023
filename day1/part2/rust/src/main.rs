@@ -15,28 +15,21 @@ fn main() {
         .map(|line| {
             println!("{}", line);
             let mut result = line.to_string();
-            let re = Regex::new("one|two|three|four|five|six|seven|eight|nine").unwrap();
-            loop {
-                let m = re.find(&result[..]);
-                let word = match m {
-                    Some(res) => res.as_str(),
-                    None => {break;}
-                };
-                let digit = match word {
-                    "one" => "1",
-                    "two" => "2",
-                    "three" => "3",
-                    "four" => "4",
-                    "five" => "5",
-                    "six" => "6",
-                    "seven" => "7",
-                    "eight" => "8",
-                    "nine" => "9",
-                    _ => panic!(),
-                };
 
-                result = result.replacen(word, digit, 1);
-            };
+            let re = Regex::new("one|two|three|four|five|six|seven|eight|nine").unwrap();
+            let matches = re.find_iter(&line[..]);
+            
+            for m in matches {
+                result.replace_range(m.range().start..m.range().start+1, word_to_digit(m.as_str()));
+            }
+        
+            let result_stage1 = result.clone();
+            let matches = re.find_iter(&result_stage1[..]);
+            
+            for m in matches {
+                result.replace_range(m.range().start..m.range().start+1, word_to_digit(m.as_str()));
+            }
+            
             println!("{}", result);
             result
         })
@@ -54,4 +47,19 @@ fn main() {
 
     println!("sum {}", result);
 
+}
+
+fn word_to_digit(word: &str) -> &str {
+    match word {
+        "one" => "1",
+        "two" => "2",
+        "three" => "3",
+        "four" => "4",
+        "five" => "5",
+        "six" => "6",
+        "seven" => "7",
+        "eight" => "8",
+        "nine" => "9",
+        _ => panic!(),
+    }
 }
