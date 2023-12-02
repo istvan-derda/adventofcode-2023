@@ -13,6 +13,7 @@ fn main() {
         .lines()
         .filter(|line| !line.is_empty())
         .map(|line| {
+            println!("{}", line);
             let mut result = line.to_string();
             let re = Regex::new("one|two|three|four|five|six|seven|eight|nine").unwrap();
             loop {
@@ -47,6 +48,7 @@ fn main() {
                 .peekable();
             let first = digits.peek().expect("Line should have a first digit").clone();
             let last = digits.last().expect("Line should have a last digit").clone();
+            println!("{}{}", first, last);
             (first * 10) + last})
         .sum();
 
