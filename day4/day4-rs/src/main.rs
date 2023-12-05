@@ -43,6 +43,7 @@ fn main() {
         .collect();
 
     let puzzle1_result: u32 = winning_number_counts
+        .clone()
         .into_iter()
         .map(|winning_number_count| {
             if winning_number_count == 0 {
@@ -54,4 +55,23 @@ fn main() {
         .sum();
 
     println!("{puzzle1_result:?}");
+
+    let puzzle2_result = (0..winning_number_counts.len())
+        .map(|i| count_cards_won(&winning_number_counts[i..]))
+        .sum::<usize>();
+
+    println!("{puzzle2_result}");
+}
+
+fn count_cards_won(winning_number_counts: &[u32]) -> usize {
+    let current = winning_number_counts[0] as usize;
+
+    match current {
+        0 => 1,
+        _ => {
+            1 + (1..=current)
+                .map(|i| count_cards_won(&winning_number_counts[i..]))
+                .sum::<usize>()
+        }
+    }
 }
