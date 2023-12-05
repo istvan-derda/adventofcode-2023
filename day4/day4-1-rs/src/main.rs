@@ -9,7 +9,7 @@ fn main() {
 
     let input_string = fs::read_to_string(in_file_path).expect("File couldn't be read");
 
-    let puzzle_result = input_string
+    let winning_number_counts: Vec<u32> = input_string
         .lines()
         .filter(|line| !line.is_empty())
         .map(|line| {
@@ -35,27 +35,23 @@ fn main() {
                 panic!()
             };
 
-            println!("{}", line);
-            println!(
-                "{:?} ::: {:?}",
-                winning_numbers.iter().collect::<Vec<_>>(),
-                my_numbers.iter().collect::<Vec<_>>()
-            );
-
-            let my_winning_numbers_count = winning_numbers
+            winning_numbers
                 .intersection(&my_numbers)
                 .collect::<HashSet<&u32>>()
-                .len();
+                .len() as u32
+        })
+        .collect();
 
-            println!("{my_winning_numbers_count:?}");
-
-            if my_winning_numbers_count > 0 {
-                return u32::pow(2, (my_winning_numbers_count - 1).try_into().unwrap());
+    let puzzle1_result: u32 = winning_number_counts
+        .into_iter()
+        .map(|winning_number_count| {
+            if winning_number_count == 0 {
+                0
             } else {
-                return 0;
+                u32::pow(2, winning_number_count - 1)
             }
         })
-        .sum::<u32>();
+        .sum();
 
-    println!("{puzzle_result:?}");
+    println!("{puzzle1_result:?}");
 }
