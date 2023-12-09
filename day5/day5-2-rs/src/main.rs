@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::cmp;
 use std::env;
 use std::fs;
 use std::ops::Range;
 use std::str::FromStr;
+use std::vec;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,22 +12,15 @@ fn main() {
     let input_string = fs::read_to_string(input_file_path).expect("Couldn't read input file");
 
     let almanac: Almanac = input_string.parse().unwrap();
-    //println!("{almanac:?}");
 
-    let seeds: Vec<u64> = almanac
-        .seed_ranges
+    let flat_almanac_map = almanac.get_flat_almanac_map();
+
+    let min_location = flat_almanac_map
+        .range_rules
         .iter()
-        .flat_map(|range| range.clone())
-        .collect();
-    println!("{seeds:?}");
-
-    let seed_to_location_map: HashMap<u64, u64> = seeds
-        .iter()
-        .map(|seed| (*seed, almanac.forward_lookup(*seed)))
-        .collect();
-    println!("{seed_to_location_map:?}");
-
-    let min_location = seed_to_location_map.values().min().unwrap();
+        .map(|range_rule| range_rule.destination_range.start)
+        .min()
+        .unwrap();
 
     println!("{min_location:?}");
 }
@@ -39,54 +33,124 @@ struct Almanac {
 
 #[derive(Debug)]
 struct AlmanacMap {
-    name: String,
-    map: Vec<RangeRule>,
+    range_rules: Vec<RangeRule>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RangeRule {
-    destination_range_start: u64,
-    source_range_start: u64,
-    range_length: u64,
+    source_range: Range<u64>,
+    destination_range: Range<u64>,
 }
 
 impl Almanac {
-    fn forward_lookup(&self, number: u64) -> u64 {
-        self.maps
+    fn get_flat_almanac_map(&self) -> AlmanacMap {
+        let seeds_as_noop_rules: Vec<RangeRule> = self
+            .seed_ranges
             .iter()
-            .fold(number, |previous_result: u64, map: &AlmanacMap| {
-                map.forward_lookup(previous_result)
+            .map(|range| RangeRule {
+                source_range: range.clone(),
+                destination_range: range.clone(),
             })
+            .collect();
+        let seeds_as_noop_map = AlmanacMap {
+            range_rules: seeds_as_noop_rules,
+        };
+        let result = self
+            .maps
+            .iter()
+            .fold(seeds_as_noop_map, |l_map, r_map| r_map.project(&l_map));
+        result
     }
 }
 
 impl AlmanacMap {
-    fn forward_lookup(&self, number: u64) -> u64 {
-        self.map
-            .iter()
-            .fold(
-                None,
-                |previous_result: Option<u64>, range_rule: &RangeRule| match previous_result {
-                    Some(_) => {
-                        //println!("{previous_result:?}");
-                        previous_result
-                    }
-                    None => {
-                        //println!("{range_rule:?}, {number:?}");
-                        let s_start = range_rule.source_range_start;
-                        let d_start = range_rule.destination_range_start;
-                        let s_to_d: i128 = i128::from(d_start) - i128::from(s_start);
-                        if s_start <= number && number < s_start + range_rule.range_length {
-                            //println!("match!");
-                            Some(u64::try_from(i128::from(number) + s_to_d).unwrap())
-                        } else {
-                            //println!("no match!");
-                            None
-                        }
-                    }
-                },
-            )
-            .unwrap_or(number)
+    fn project(&self, left_map: &AlmanacMap) -> AlmanacMap {
+        let mut l_rules = left_map.range_rules.clone();
+        let mut result_rules = vec![];
+        while let Some(l_rule) = l_rules.pop() {
+            let mut l_rule_matched = false;
+            for r_rule in &self.range_rules {
+                if let Some((new_rule, leftover_rules)) = r_rule.combine(&l_rule) {
+                    result_rules.push(new_rule);
+                    l_rules.extend(leftover_rules);
+                    l_rule_matched = true;
+                    break;
+                }
+            }
+            if !l_rule_matched {
+                result_rules.push(l_rule);
+            }
+        }
+        AlmanacMap {
+            range_rules: result_rules,
+        }
+    }
+}
+
+impl RangeRule {
+    fn forward_lookup(&self, number: u64) -> Option<u64> {
+        let s_start = self.source_range.start;
+        let d_start = self.destination_range.start;
+        let s_to_d: i128 = i128::from(d_start) - i128::from(s_start);
+        if self.source_range.contains(&number) {
+            Some(u64::try_from(i128::from(number) + s_to_d).unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn backward_lookup(&self, number: u64) -> Option<u64> {
+        let s_start = self.source_range.start;
+        let d_start = self.destination_range.start;
+        let d_to_s: i128 = i128::from(s_start) - i128::from(d_start);
+        if self.destination_range.contains(&number) {
+            Some(u64::try_from(i128::from(number) + d_to_s).unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn combine(&self, l_rule: &RangeRule) -> Option<(RangeRule, Vec<RangeRule>)> {
+        let inner = cmp::max(l_rule.destination_range.start, self.source_range.start)
+            ..cmp::min(l_rule.destination_range.end, self.source_range.end);
+        if inner.is_empty() {
+            return None;
+        }
+        let outer_top = l_rule.destination_range.start
+            ..cmp::min(l_rule.destination_range.end, self.source_range.start);
+        let outer_bottom = cmp::max(l_rule.destination_range.start, self.source_range.end)
+            ..l_rule.destination_range.end;
+
+        let combined = RangeRule {
+            source_range: l_rule.backward_lookup(inner.start).unwrap()
+                ..l_rule
+                    .backward_lookup(inner.end - 1)
+                    .expect(&format!("left: {l_rule:?}\nright: {self:?}\noverlap: {inner:?}")[..])
+                    + 1,
+            destination_range: self.forward_lookup(inner.start).unwrap()
+                ..self.forward_lookup(inner.end - 1).unwrap() + 1,
+        };
+
+        let mut leftover_left_rules = vec![];
+        if !outer_top.is_empty() {
+            let outer_top_rule = RangeRule {
+                source_range: l_rule.backward_lookup(outer_top.start).unwrap()
+                    ..l_rule.backward_lookup(outer_top.end - 1).unwrap() + 1,
+                destination_range: outer_top,
+            };
+            leftover_left_rules.push(outer_top_rule);
+        }
+
+        if !outer_bottom.is_empty() {
+            let outer_bottom_rule = RangeRule {
+                source_range: l_rule.backward_lookup(outer_bottom.start).unwrap()
+                    ..l_rule.backward_lookup(outer_bottom.end - 1).unwrap() + 1,
+                destination_range: outer_bottom,
+            };
+            leftover_left_rules.push(outer_bottom_rule);
+        }
+
+        Some((combined, leftover_left_rules))
     }
 }
 
@@ -124,20 +188,13 @@ impl FromStr for AlmanacMap {
     type Err = String;
 
     fn from_str(block_string: &str) -> Result<Self, Self::Err> {
-        //println!("parsing block '{block_string:?}'");
-        let name = block_string
-            .lines()
-            .nth(0)
-            .ok_or("no firstline")?
-            .to_string();
-
-        let map: Vec<RangeRule> = block_string
+        let range_rules: Vec<RangeRule> = block_string
             .lines()
             .skip(1)
             .map(|line| line.parse::<RangeRule>().unwrap())
             .collect();
 
-        Ok(AlmanacMap { name, map })
+        Ok(AlmanacMap { range_rules })
     }
 }
 
@@ -154,9 +211,8 @@ impl FromStr for RangeRule {
         };
 
         Ok(RangeRule {
-            destination_range_start,
-            source_range_start,
-            range_length,
+            destination_range: destination_range_start..destination_range_start + range_length,
+            source_range: source_range_start..source_range_start + range_length,
         })
     }
 }
