@@ -58,19 +58,19 @@ impl Almanac {
         let result = self
             .maps
             .iter()
-            .fold(seeds_as_noop_map, |l_map, r_map| r_map.project(&l_map));
+            .fold(seeds_as_noop_map, |l_map, r_map| r_map.left_reduce(&l_map));
         result
     }
 }
 
 impl AlmanacMap {
-    fn project(&self, left_map: &AlmanacMap) -> AlmanacMap {
+    fn left_reduce(&self, left_map: &AlmanacMap) -> AlmanacMap {
         let mut l_rules = left_map.range_rules.clone();
         let mut result_rules = vec![];
         while let Some(l_rule) = l_rules.pop() {
             let mut l_rule_matched = false;
             for r_rule in &self.range_rules {
-                if let Some((new_rule, leftover_rules)) = r_rule.combine(&l_rule) {
+                if let Some((new_rule, leftover_rules)) = r_rule.left_reduce(&l_rule) {
                     result_rules.push(new_rule);
                     l_rules.extend(leftover_rules);
                     l_rule_matched = true;
@@ -110,7 +110,7 @@ impl RangeRule {
         }
     }
 
-    fn combine(&self, l_rule: &RangeRule) -> Option<(RangeRule, Vec<RangeRule>)> {
+    fn left_reduce(&self, l_rule: &RangeRule) -> Option<(RangeRule, Vec<RangeRule>)> {
         let inner = cmp::max(l_rule.destination_range.start, self.source_range.start)
             ..cmp::min(l_rule.destination_range.end, self.source_range.end);
         if inner.is_empty() {
